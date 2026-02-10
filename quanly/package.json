@@ -1,0 +1,12 @@
+{
+  "name": "quanly",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "concurrently \"npm run backend\" \"npm run frontend\"",
+    "backend": "cd danbooru-backend && node server.js",
+    "frontend": "cd danbooru-frontend && npm start"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

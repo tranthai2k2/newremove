@@ -1,0 +1,267 @@
+.folder-manager {
+  background: rgba(255, 255, 255, 0.05);
+  padding: 20px;
+  border-radius: 12px;
+}
+
+.add-folder-section {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.folder-input {
+  flex: 1;
+  padding: 12px 16px;
+  font-size: 15px;
+  border: 2px solid rgba(97, 218, 251, 0.3);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  outline: none;
+  transition: all 0.3s;
+  font-family: 'Courier New', monospace;
+}
+
+.folder-input:focus {
+  border-color: #61dafb;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.folder-input::placeholder {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.btn-add {
+  padding: 12px 24px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  border-radius: 8px;
+  color: white;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+  white-space: nowrap;
+}
+
+.btn-add:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+}
+
+.btn-add:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.message {
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  font-weight: 500;
+  animation: slideIn 0.3s ease-out;
+}
+
+.message.success {
+  background: rgba(74, 222, 128, 0.2);
+  border-left: 4px solid #4ade80;
+}
+
+.message.error {
+  background: rgba(239, 68, 68, 0.2);
+  border-left: 4px solid #ef4444;
+}
+
+.message.info {
+  background: rgba(59, 130, 246, 0.2);
+  border-left: 4px solid #3b82f6;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.folders-section {
+  margin-bottom: 20px;
+}
+
+.folders-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.folders-header h3 {
+  color: #61dafb;
+  font-size: 1.2rem;
+}
+
+.btn-scan-all {
+  padding: 8px 16px;
+  background: rgba(97, 218, 251, 0.2);
+  border: 2px solid #61dafb;
+  border-radius: 6px;
+  color: #61dafb;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.btn-scan-all:hover:not(:disabled) {
+  background: #61dafb;
+  color: #0a0e27;
+}
+
+.btn-scan-all:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.empty-folders {
+  text-align: center;
+  padding: 40px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.folders-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.folder-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  background: rgba(26, 31, 58, 0.6);
+  border: 2px solid rgba(97, 218, 251, 0.3);
+  border-radius: 8px;
+  transition: all 0.3s;
+}
+
+.folder-item:hover {
+  border-color: #61dafb;
+  background: rgba(26, 31, 58, 0.8);
+}
+
+.folder-item.missing {
+  border-color: rgba(239, 68, 68, 0.5);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.folder-icon {
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.folder-details {
+  flex: 1;
+}
+
+.folder-name {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: white;
+  margin-bottom: 4px;
+}
+
+.folder-path {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.6);
+  font-family: 'Courier New', monospace;
+  margin-bottom: 8px;
+  word-break: break-all;
+}
+
+.folder-meta {
+  display: flex;
+  gap: 16px;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.folder-count {
+  color: #61dafb;
+  font-weight: 600;
+}
+
+.folder-warning {
+  margin-top: 8px;
+  padding: 6px 12px;
+  background: rgba(239, 68, 68, 0.2);
+  border-left: 3px solid #ef4444;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  color: #ef4444;
+}
+
+.folder-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-action {
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 6px;
+  font-size: 1.2rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-scan {
+  background: rgba(97, 218, 251, 0.2);
+}
+
+.btn-scan:hover:not(:disabled) {
+  background: #61dafb;
+  transform: scale(1.1);
+}
+
+.btn-delete {
+  background: rgba(239, 68, 68, 0.2);
+}
+
+.btn-delete:hover:not(:disabled) {
+  background: #ef4444;
+  transform: scale(1.1);
+}
+
+.btn-action:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.folder-hint {
+  background: rgba(255, 255, 255, 0.05);
+  padding: 16px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+
+.folder-hint p {
+  margin-bottom: 8px;
+  color: #61dafb;
+}
+
+.folder-hint ul {
+  margin: 0;
+  padding-left: 24px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.folder-hint li {
+  margin-bottom: 4px;
+}
