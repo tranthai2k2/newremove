@@ -229,7 +229,7 @@ class PolygonScene(QGraphicsScene):
             if self.rect_item:
                 self.removeItem(self.rect_item)
             self.rect_item = None
-            self.enable_rect(False)
+            # Giữ nguyên rect_mode — không tự thoát
 
     def _add_point(self, p: QPointF):
         r = 5
@@ -474,7 +474,9 @@ class MainWindow(QMainWindow):
     def _build_src_list(self):
         self.list_src.clear()
         if not self.folder: return
-        for f in sorted(self.folder.iterdir()):
+        import re
+        def natural_key(p): return [int(t) if t.isdigit() else t.lower() for t in re.split(r'(\d+)', p.stem)]
+        for f in sorted(self.folder.iterdir(), key=natural_key):
             if f.suffix.lower() not in SUPPORTED: continue
             item = QListWidgetItem(f.stem)
             thumb = QPixmap(str(f)).scaled(THUMB, THUMB, Qt.KeepAspectRatio, Qt.SmoothTransformation)
@@ -513,7 +515,9 @@ class MainWindow(QMainWindow):
     def _load_src(self):
         if not self.folder or not self.list_src.currentItem(): return
         stem = self.list_src.currentItem().text()
-        file = next(self.folder.glob(f"{stem}.*"))
+        matches = list(self.folder.glob(f"{stem}.*"))
+        if not matches: return
+        file = matches[0]
         pix = QPixmap(str(file))
         if not pix.isNull():
             self.scene.set_pixmap(pix)

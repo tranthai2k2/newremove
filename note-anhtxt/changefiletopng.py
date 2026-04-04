@@ -1,52 +1,56 @@
 from PIL import Image
 from pathlib import Path
-import os
+try:
+    import pillow_avif
+except ImportError:
+    pass
 
-# Thư mục chứa file WebP
-FOLDER = r"D:\zhangyao\1-old\[PIXIV] Noi [810034] [AI Generated] [12]-1280x\7"
-
+FOLDER = r"F:\chưa làm\tanhatthuoctinh_Attribute Collection - Copy"
 folder = Path(FOLDER)
 
-# Tìm file WebP
-webp_files = []
-for ext in ['*.webp', '*.WEBP']:
-    webp_files.extend(list(folder.rglob(ext)))
+# .png (lowercase) = đích, bỏ qua
+# .PNG / .Png ... = rename về .png (không re-encode)
+# .webp/.avif/.jpg/.jpeg (mọi hoa thường) = convert sang .png
+convert_exts = {'.webp', '.avif', '.jpg', '.jpeg'}
 
-if not webp_files:
-    print("Không có file WebP")
+all_files = [
+    f for f in folder.rglob("*")
+    if f.is_file() and f.suffix != '.png' and f.suffix.lower() in convert_exts | {'.png'}
+]
+
+if not all_files:
+    print("Không tìm thấy file phù hợp.")
     exit()
 
-for i, webp in enumerate(webp_files, 1):
+print(f"Tìm thấy {len(all_files)} file. Bắt đầu chuyển đổi...\n")
+
+total_converted = 0
+total_errors = 0
+
+for i, file_path in enumerate(all_files, 1):
     try:
-        # Kiểm tra file tồn tại
-        if not webp.exists():
+        if not file_path.exists():
             continue
-        
-        # Convert
-        img = Image.open(webp)
-        
-        if img.mode != 'RGB':
-            rgb = Image.new('RGB', img.size, (255, 255, 255))
-            if img.mode == 'P':
-                img = img.convert('RGBA')
-            if 'A' in img.mode:
-                rgb.paste(img, mask=img.split()[-1])
-            else:
-                rgb.paste(img)
-            img = rgb
-        
-        jpg = webp.with_suffix('.jpg')
-        img.save(jpg, 'JPEG', quality=95, optimize=True)
-        img.close()
-        
-        # Xóa WebP
-        os.remove(str(webp))
-        
-        print(f"[{i}/{len(webp_files)}] ✅ {webp.name}")
-        
-    except FileNotFoundError:
-        continue  # Skip nếu file không tồn tại
-    except PermissionError:
-        print(f"[{i}/{len(webp_files)}] ⚠️ {webp.name} - File đang được mở")
+
+        png_path = file_path.with_suffix('.png')
+
+        if file_path.suffix.lower() == '.png':
+            # Chỉ rename .PNG → .png, không re-encode
+            file_path.rename(png_path)
+            print(f"[{i}/{len(all_files)}] 🔤 rename: {file_path.name} -> {png_path.name}")
+        else:
+            with Image.open(file_path) as img:
+                final_img = img.convert("RGBA") if img.mode != "RGBA" else img
+                final_img.save(png_path, 'PNG', optimize=True)
+            file_path.unlink()
+            print(f"[{i}/{len(all_files)}] ✅ {file_path.parent.name}/{file_path.name} -> {png_path.name}")
+        total_converted += 1
+
     except Exception as e:
-        print(f"[{i}/{len(webp_files)}] ❌ {webp.name} - {e}")
+        print(f"[{i}/{len(all_files)}] ❌ {file_path.parent.name}/{file_path.name} - Lỗi: {e}")
+        total_errors += 1
+
+print(f"\n{'='*50}")
+print(f"✅ Thành công: {total_converted} file")
+print(f"❌ Lỗi:       {total_errors} file")
+print("Hoàn tất!")

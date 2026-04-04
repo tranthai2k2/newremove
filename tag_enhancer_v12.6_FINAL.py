@@ -13,7 +13,7 @@ from datetime import datetime
 from pathlib import Path
 import argparse
 
-DEFAULT_FOLDER = Path(r"D:\zhangyao\Noi\noi (24)")
+DEFAULT_FOLDER = Path(r"D:\zhangyao\1-old\test\Rurin - Archmage Restaurant")
 
 # Parser arguments
 parser = argparse.ArgumentParser(description="Tag Enhancer")
@@ -278,8 +278,9 @@ def is_self_exposure(tags: Set[str]) -> bool:
 
 def tier_2l_kissing_faceless_bald(tags: Set[str]) -> Tuple[bool, str]:
     """V12.7-NEW: French kiss/kissing → add faceless male + bald"""
-    
-    # Check for kissing tags
+    has_human_male = any(check_tag_exists(tags, t) for t in {"1boy", "2boys", "multiple boys"})
+    if not has_human_male:
+        return False, "" 
     has_kissing = any(t in tags for t in {
         "french kiss", "kissing", "kiss", "deep kiss"
     })
@@ -287,14 +288,14 @@ def tier_2l_kissing_faceless_bald(tags: Set[str]) -> Tuple[bool, str]:
     if not has_kissing:
         return False, ""
     
-    # Block if self-exposure (POV + solo)
     if is_self_exposure(tags):
         return False, ""
     
-    # Require hetero context: ANY boy tag + 1girl
     has_boy = any(check_tag_exists(tags, boy_tag) for boy_tag in [
         "1boy", "2boys", "multiple boys"
     ])
+    
+    # ← FIX: dùng check_tag_exists thay vì "1girl" in tags
     has_1girl = check_tag_exists(tags, "1girl")
     
     if not (has_boy and has_1girl):
@@ -302,12 +303,10 @@ def tier_2l_kissing_faceless_bald(tags: Set[str]) -> Tuple[bool, str]:
     
     added = []
     
-    # Add faceless male (with emphasis)
     if not check_tag_exists(tags, "faceless male"):
         tags.add("((faceless male))")
         added.append("faceless_male")
     
-    # Add bald
     if "bald" not in tags and "((bald))" not in tags:
         tags.add("((bald))")
         added.append("bald")
@@ -316,7 +315,6 @@ def tier_2l_kissing_faceless_bald(tags: Set[str]) -> Tuple[bool, str]:
         return True, f"kissing: added {', '.join(added)}"
     
     return False, ""
-
 def tier_new_solo_assisted_exposure_cleanup(tags: Set[str]) -> Tuple[bool, str]:
     """V12.7-ALPHA: Remove sex tags from solo + assisted exposure"""
     has_solo = "solo focus" in tags
@@ -373,8 +371,103 @@ def load_remove_tags(folder: Path) -> Set[str]:
         except Exception:
             pass
     return tags
+
+def tier_new_doggystyle_lookback_arms_up(tags: Set[str]) -> Tuple[bool, str]:
+    """V12.8-NEW: doggystyle + sex from behind + top-down bottom-up + looking back → arms up cho 1girl
+    BLOCK nếu có bound/restraint (tay đang bị trói)
+    """
+
+    has_doggystyle = "doggystyle" in tags
+    has_sex_behind = has_any_tag(tags, {"sex from behind", "from behind"})
+    has_topdown = "top-down bottom-up" in tags
+    has_looking_back = "looking back" in tags
+
+    if not (has_doggystyle and has_sex_behind and has_topdown and has_looking_back):
+        return False, ""
+
+    if is_self_exposure(tags):
+        return False, ""
+
+    # ✅ BLOCK nếu có bound/restraint
+    has_restraint = has_any_tag(tags, RESTRAINT_TAGS) or any(
+        "restrained" in t or "bound" in t or "arms behind back" in t
+        for t in tags
+    )
+    if has_restraint:
+        return False, ""
+
+    has_1girl_raw = "1girl" in tags
+    has_1girl_grouped = any("1girl" in t and t.startswith("((") for t in tags)
+
+    if not (has_1girl_raw or has_1girl_grouped):
+        return False, ""
+
+    # 1girl raw → wrap
+    if has_1girl_raw:
+        tags.discard("1girl")
+        tags.add("((1girl, arms up))")
+        return True, "doggystyle+lookback+topdown: wrapped 1girl → ((1girl, arms up))"
+
+    # Đã grouped → upgrade thêm arms up
+    for t in list(tags):
+        if "1girl" in t and t.startswith("((") and "arms up" not in t:
+            inner = t.strip("()")
+            tags.discard(t)
+            tags.add(f"(({inner}, arms up))")
+            return True, f"doggystyle+lookback+topdown: upgraded {t} → added arms up"
+
+    return False, ""
 def tier_new_nipples_breasts_out(tags: Set[str]) -> Tuple[bool, str]:
-    """V12.7-NEW: nipples → breasts out (với blocking conditions)"""
+    """V12.8-NEW: nipples → breasts out
+    - nude/completely nude/topless/naked → FORCE thêm cả breasts out + nipples
+    - undressed → bỏ qua (không trigger)
+    - solo 1girl không có boy/2girls → skip
+    """
+
+    FORCE_TAGS = {"nude", "completely nude", "topless", "naked"}
+    has_force = has_any_tag(tags, FORCE_TAGS)
+    has_nipples = "nipples" in tags
+
+    # Nếu không có nipples VÀ không có force tags → skip
+    if not has_nipples and not has_force:
+        return False, ""
+
+    # Block nếu undressed (không force, không nipples đơn thuần)
+    if "undressed" in tags and not has_force and not has_nipples:
+        return False, ""
+
+    # Require hetero OR lesbian context
+    has_boy = any(check_tag_exists(tags, t) for t in ["1boy", "2boys", "multiple boys"])
+    has_multi_girl = "2girls" in tags or "multiple girls" in tags
+
+    if not (has_boy or has_multi_girl):
+        return False, ""
+
+    # Block self-exposure
+    if is_self_exposure(tags):
+        return False, ""
+
+    added = []
+
+    # Force path: nude/completely nude/topless/naked → thêm cả nipples + breasts out
+    if has_force:
+        if "nipples" not in tags:
+            tags.add("nipples")
+            added.append("nipples")
+        if "breasts out" not in tags and "breast out" not in tags:
+            tags.add("breasts out")
+            added.append("breasts_out")
+
+    # Normal path: chỉ có nipples → thêm breasts out
+    elif has_nipples:
+        if "breasts out" not in tags and "breast out" not in tags:
+            tags.add("breasts out")
+            added.append("breasts_out")
+
+    if added:
+        return True, f"nipples_breasts_out: added {', '.join(added)}"
+
+    return False, ""    """V12.7-NEW: nipples → breasts out (với blocking conditions)"""
     
     # Check if has nipples
     if "nipples" not in tags:
@@ -411,6 +504,67 @@ def tier_new_nipples_breasts_out(tags: Set[str]) -> Tuple[bool, str]:
     tags.add("breasts out")
     return True, "nipples_visible: added breasts_out"
 
+def tier_new_restrained_lying_pov_arms_up(tags: Set[str]) -> Tuple[bool, str]:
+    """V12.9-NEW: 1girl + (restrained OR bound wrists) + lying + pov hands + grabbing another's breast + solo focus → arms up"""
+    
+    has_1girl = check_tag_exists(tags, "1girl")
+    if not has_1girl:
+        return False, ""
+    
+    has_restrained = has_any_tag(tags, {"restrained", "bound wrists"})
+    if not has_restrained:
+        return False, ""
+    
+    has_lying = has_any_tag(tags, LYING_INDICATORS)
+    if not has_lying:
+        return False, ""
+    
+    has_pov_hands = "pov hands" in tags
+    if not has_pov_hands:
+        return False, ""
+    
+    has_grab_breast = "grabbing another's breast" in tags
+    if not has_grab_breast:
+        return False, ""
+    
+    has_solo_focus = "solo focus" in tags
+    if not has_solo_focus:
+        return False, ""
+    
+    # Thêm arms up vào grouped tag nếu đã có, hoặc tạo mới
+    for t in list(tags):
+        if "1girl" in t and t.startswith("((") and "arms up" not in t:
+            inner = t.strip("()")
+            tags.discard(t)
+            tags.add(f"(({inner}, arms up))")
+            return True, f"restrained_lying_pov: upgraded {t} → added arms_up"
+    
+    # Fallback: raw 1girl → wrap với arms up
+    if "1girl" in tags:
+        tags.discard("1girl")
+        tags.add("((1girl, arms up))")
+        return True, "restrained_lying_pov: wrapped 1girl → ((1girl, arms up))"
+    
+    return False, ""
+
+def tier_new_missionary_lying_spread_legs(tags: Set[str]) -> Tuple[bool, str]:
+    """V12.7-NEW: Missionary + lying + on back → add spread legs"""
+    
+    has_missionary = "missionary" in tags
+    has_lying = "lying" in tags
+    has_on_back = "on back" in tags
+    
+    if not (has_missionary and has_lying and has_on_back):
+        return False, ""
+    
+    if is_self_exposure(tags):
+        return False, ""
+    
+    if "spread legs" not in tags:
+        tags.add("spread legs")
+        return True, "missionary+lying+on_back: added spread_legs"
+    
+    return False, ""
 def tier_0_arms_up(tags: Set[str]) -> Tuple[bool, str]:
     added = []
     removed = []
@@ -467,7 +621,6 @@ def tier_0_arms_up(tags: Set[str]) -> Tuple[bool, str]:
         return (True, f"arms_up: {' | '.join(messages)}")
     else:
         return (False, "")
-
 def tier_1_faceless_wrapping(tags: Set[str]) -> Tuple[bool, str]:
     if is_self_exposure(tags):
         return False, ""
@@ -485,7 +638,20 @@ def tier_1_faceless_wrapping(tags: Set[str]) -> Tuple[bool, str]:
         return True, "faceless pair requirement: added ((bald))"
     
     return False, ""
-
+def tier_new_sex_behind_topdown_remove_anus(tags: Set[str]) -> Tuple[bool, str]:
+    """V12.7-NEW: sex from behind + top-down bottom-up → remove anus"""
+    
+    has_sex_behind = has_any_tag(tags, {"sex from behind", "from behind"})
+    has_topdown = "top-down bottom-up" in tags
+    
+    if not (has_sex_behind and has_topdown):
+        return False, ""
+    
+    if "anus" in tags:
+        tags.discard("anus")
+        return True, "sex_behind+topdown: removed anus"
+    
+    return False, ""
 def tier_1_5_clothed_female_nude_male(tags: Set[str]) -> Tuple[bool, str]:
     # Skip if already present
     if check_tag_exists(tags, "clothed female nude male"):
@@ -516,7 +682,52 @@ def tier_1_5_clothed_female_nude_male(tags: Set[str]) -> Tuple[bool, str]:
             return True, "clothed_female_nude_male: added"
     
     return False, ""
-
+def tier_new_missionary_restrained_arms_up_grouping(tags: Set[str]) -> Tuple[bool, str]:
+    """V12.7-NEW: missionary + lying + on back + restrained/bound → add arms up to 1girl group"""
+    
+    has_missionary = "missionary" in tags
+    has_lying = "lying" in tags
+    has_on_back = "on back" in tags
+    
+    if not (has_missionary and has_lying and has_on_back):
+        return False, ""
+    
+    # Check restrained group already formed
+    RESTRAINED_GROUP_TAGS = {
+        "((1girl, restrained, bound wrists))",
+        "((1girl, restrained, arms behind back))"
+    }
+    has_restrained_group = has_any_tag(tags, RESTRAINED_GROUP_TAGS)
+    
+    # Fallback: check raw restraint tags
+    has_raw_restraint = has_any_tag(tags, RESTRAINT_TAGS)
+    
+    if not (has_restrained_group or has_raw_restraint):
+        return False, ""
+    
+    if is_self_exposure(tags):
+        return False, ""
+    
+    # If already grouped → upgrade group to include arms up
+    for old_group in RESTRAINED_GROUP_TAGS:
+        if old_group in tags:
+            # Extract inner content: ((1girl, restrained, bound wrists)) → 1girl, restrained, bound wrists
+            inner = old_group.strip("()")
+            if "arms up" not in inner:
+                tags.discard(old_group)
+                tags.add(f"(({inner}, arms up))")
+                return True, f"missionary_restrained: upgraded {old_group} → added arms_up"
+    
+    # Fallback: raw 1girl + restraint → group with arms up
+    if "1girl" in tags:
+        found_restraint = [t for t in tags if t in RESTRAINT_TAGS]
+        tags.discard("1girl")
+        for t in found_restraint:
+            tags.discard(t)
+        tags.add("((1girl, restrained, bound wrists, arms up))")
+        return True, "missionary_restrained: grouped 1girl + restrained + arms_up"
+    
+    return False, ""
 # Define helper function
 def is_fingering_self_exposure(tags: Set[str]) -> bool:
     """Check if fingering + pov + solo"""
@@ -558,67 +769,123 @@ def tier_new_pov_solo_cleanup(tags: Set[str]) -> Tuple[bool, str]:
         return True, f"pov_solo_cleanup: removed {', '.join(removed)}"
     return False, ""
 
-# def tier_new_restraint_grouping(tags: Set[str]) -> Tuple[bool, str]:
-#     """V12.7-ALPHA: Comprehensive groping blocking"""
-#     has_restraint = has_any_tag(tags, RESTRAINT_TAGS)
-#     if not has_restraint:
-#         return False, ""
+def tier_new_doggystyle_bound_remove_arms_behind_back(tags: Set[str]) -> Tuple[bool, str]:
+    """V12.9-NEW: doggystyle/bent over/top-down bottom-up + bound/restrained + 1girl
+    → remove arms behind back (tay bị trói phía sau không hợp lý khi cúi người)
+    """
     
-#     has_1girl = "1girl" in tags
-#     if not has_1girl:
-#         return False, ""
+    has_1girl = check_tag_exists(tags, "1girl")
+    if not has_1girl:
+        return False, ""
     
-#     # Block if self-exposure
-#     if is_self_exposure(tags):
-#         return False, ""
+    # Check bound/restrained conditions
+    BOUND_CHECK_TAGS = {
+        "bound arms", "bound wrists", "restrained",
+        "rope bondage", "bondage", "bound", "tied up",
+        "wrist cuffs", "cuffs"
+    }
+    has_bound = has_any_tag(tags, BOUND_CHECK_TAGS)
+    if not has_bound:
+        return False, ""
     
-#     # ✅ 8 BLOCKING CONDITIONS
-#     has_oral = has_any_tag(tags, ORAL_TAGS)
-#     has_clothing_manipulation = has_any_tag(tags, CLOTHING_MANIPULATION_TAGS)
-#     has_existing_grabs = has_any_tag(tags, EXISTING_GRAB_TAGS)
-#     has_1boy = "1boy" in tags
-#     has_cum_oral = has_any_tag(tags, CUM_ORAL_TAGS) and has_oral
-#     has_spread_exposure = has_any_tag(tags, SPREAD_EXPOSURE_TAGS)
-#     has_generic_grabbing = any("grabbing" in tag for tag in tags)
+    # Check doggystyle/bent over/top-down bottom-up
+    DOGGY_CHECK_TAGS = {
+        "doggystyle", "bent over", "top-down bottom-up",
+        "all fours", "all_fours", "on hands and knees"
+    }
+    has_doggy_position = has_any_tag(tags, DOGGY_CHECK_TAGS)
     
-#     # Remove and group
-#     tags.discard("1girl")
-#     for tag in list(RESTRAINT_TAGS):
-#         if tag in tags:
-#             tags.discard(tag)
+    # Check sex from behind (optional, strengthens condition)
+    has_sex_behind = has_any_tag(tags, {"sex from behind", "from behind"})
     
-#     tags.add("((1girl, restrained, bound wrists))")
+    # Trigger nếu có doggy position, hoặc sex from behind + bound
+    if not (has_doggy_position or has_sex_behind):
+        return False, ""
     
-#     # Build blocking reasons
-#     block_reasons = []
-#     if has_oral:
-#         block_reasons.append("has oral")
-#     if has_clothing_manipulation:
-#         block_reasons.append("has clothing manipulation")
-#     if has_existing_grabs:
-#         block_reasons.append("has existing grabs")
-#     if not has_1boy:
-#         block_reasons.append("no 1boy")
-#     if has_cum_oral:
-#         block_reasons.append("cum in mouth/nose")
-#     if has_spread_exposure:
-#         block_reasons.append("spread anus/ass")
-#     if has_generic_grabbing:
-#         block_reasons.append("has generic grabbing")
+    # Remove arms behind back variants
+    ARMS_BEHIND_TAGS = {
+        "arms behind back",
+        "arm behind back",
+        "hands behind back",
+        "wrists behind back",
+        "((1girl, arms behind back))",
+        "((1girl, restrained, arms behind back))",
+    }
     
-#     # Skip groping if ANY blocking condition
-#     if block_reasons:
-#         reason_str = ", ".join(block_reasons)
-#         return True, f"restraint_grouping: grouped (no groping - {reason_str})"
+    removed = []
+    for t in list(tags):
+        if t in ARMS_BEHIND_TAGS:
+            tags.discard(t)
+            removed.append(t)
+        # Handle grouped tags chứa arms behind back
+        elif "arms behind back" in t and t.startswith("((") and "1girl" in t:
+            # Rebuild group without arms behind back
+            inner = t.strip("()")
+            parts = [p.strip() for p in inner.split(",") if p.strip() != "arms behind back"]
+            tags.discard(t)
+            if len(parts) > 1:
+                tags.add(f"(({', '.join(parts)}))")
+            elif len(parts) == 1:
+                tags.add(parts[0])
+            removed.append(t)
     
-#     # Add random groping ONLY if NO blocking
-#     chosen_option = random.choice(GROPING_OPTIONS)
-#     for tag in chosen_option:
-#         if tag not in tags:
-#             tags.add(tag)
+    if removed:
+        return True, f"doggystyle_bound: removed arms_behind_back from {', '.join(removed)}"
     
-#     return True, f"restraint_grouping: grouped + groping"
+    return False, ""
 
+def tier_new_bound_arms_behind_back_grouping(tags: Set[str]) -> Tuple[bool, str]:
+    """V12.7-NEW: Restrained/bound/wrists + arms behind back → group with 1girl"""
+    
+    # Check restraint tags
+    BOUND_TAGS = {
+        "restrained", "bound", "bound wrists", "wrist cuffs",
+        "bound arms", "rope bondage", "bondage", "tied up",
+        "bound legs", "leg cuffs", "cuffs"
+    }
+    has_restraint = has_any_tag(tags, BOUND_TAGS)
+    
+    if not has_restraint:
+        return False, ""
+    
+    # Check arms behind back
+    ARMS_BEHIND_TAGS = {
+        "arms behind back", "arm behind back", "hands behind back",
+        "wrists behind back"
+    }
+    has_arms_behind = has_any_tag(tags, ARMS_BEHIND_TAGS)
+    
+    if not has_arms_behind:
+        return False, ""
+    
+    # Require 1girl
+    if "1girl" not in tags:
+        return False, ""
+    
+    # Block if already grouped
+    if any("1girl" in t and "arms behind back" in t for t in tags):
+        return False, ""
+    
+    # Block self-exposure
+    if is_self_exposure(tags):
+        return False, ""
+    
+    # Collect all found restraint + arms behind tags
+    found_restraint = [t for t in tags if t in BOUND_TAGS]
+    found_arms = [t for t in tags if t in ARMS_BEHIND_TAGS]
+    
+    # Remove individual tags
+    tags.discard("1girl")
+    for t in found_restraint:
+        tags.discard(t)
+    for t in found_arms:
+        tags.discard(t)
+    
+    # Group together
+    tags.add("((1girl, restrained, arms behind back))")
+    
+    removed = found_restraint + found_arms
+    return True, f"bound_arms_behind: grouped 1girl + {len(removed)} tags → ((1girl, restrained, arms behind back))"
 def tier_new_restraint_grouping(tags: Set[str]) -> Tuple[bool, str]:
     """V12.7-ALPHA: Comprehensive groping blocking"""
     has_restraint = has_any_tag(tags, RESTRAINT_TAGS)
@@ -686,6 +953,9 @@ def tier_new_restraint_grouping(tags: Set[str]) -> Tuple[bool, str]:
     return True, f"restraint_grouping: grouped + groping"
 
 def tier_2a_doggystyle_fat_man(tags: Set[str]) -> Tuple[bool, str]:
+    has_human_male = any(check_tag_exists(tags, t) for t in {"1boy", "2boys", "multiple boys"})
+    if not has_human_male:
+        return False, ""   
     # NEW V12.6: Bypass pov+solo block if has sex position
     if is_self_exposure(tags) and not has_explicit_sex_position(tags):
         return False, ""
@@ -709,6 +979,9 @@ def tier_2a_doggystyle_fat_man(tags: Set[str]) -> Tuple[bool, str]:
     return False, ""
 
 def tier_2b_rape_fat_man(tags: Set[str]) -> Tuple[bool, str]:
+    has_human_male = any(check_tag_exists(tags, t) for t in {"1boy", "2boys", "multiple boys"})
+    if not has_human_male:
+        return False, "" 
     # NEW V12.6: Bypass pov+solo block if has sex position
     if is_self_exposure(tags) and not has_explicit_sex_position(tags):
         return False, ""
@@ -729,6 +1002,9 @@ def tier_2b_rape_fat_man(tags: Set[str]) -> Tuple[bool, str]:
     return False, ""
 def tier_2j_standing_holding_leg_faceless_add_fat_man(tags: Set[str]) -> Tuple[bool, str]:
     """V12.7-NEW: Đã có faceless+bald + standing sex + holding leg → thêm fat man"""
+    has_human_male = any(check_tag_exists(tags, t) for t in {"1boy", "2boys", "multiple boys"})
+    if not has_human_male:
+        return False, "" 
     if is_self_exposure(tags):
         return False, ""
     
@@ -754,6 +1030,9 @@ def tier_2j_standing_holding_leg_faceless_add_fat_man(tags: Set[str]) -> Tuple[b
 
 def tier_2k_oral_pov_sitting_fat_man(tags: Set[str]) -> Tuple[bool, str]:
     """V12.7-ALPHA: Oral/imminent + pov/sitting + solo → fat man"""
+    has_human_male = any(check_tag_exists(tags, t) for t in {"1boy", "2boys", "multiple boys"})
+    if not has_human_male:
+        return False, "" 
     has_oral = has_any_tag(tags, ORAL_TAGS)
     has_imminent = has_any_tag(tags, IMMINENT_ORAL_TAGS)  # ← NEW
     has_pov = has_any_tag(tags, POV_TAGS)
@@ -769,6 +1048,9 @@ def tier_2k_oral_pov_sitting_fat_man(tags: Set[str]) -> Tuple[bool, str]:
     return False, ""
 
 def tier_2c_all_fours_handjob_fat_man(tags: Set[str]) -> Tuple[bool, str]:
+    has_human_male = any(check_tag_exists(tags, t) for t in {"1boy", "2boys", "multiple boys"})
+    if not has_human_male:
+        return False, "" 
     if is_self_exposure(tags):
         return False, ""
     
@@ -784,6 +1066,9 @@ def tier_2c_all_fours_handjob_fat_man(tags: Set[str]) -> Tuple[bool, str]:
     return False, ""
 # ==================== TIER 2D: CUNNILINGUS - FACELESS + BALD ====================
 def tier_2d_cunnilingus_faceless_bald(tags: Set[str]) -> Tuple[bool, str]:
+    has_human_male = any(check_tag_exists(tags, t) for t in {"1boy", "2boys", "multiple boys"})
+    if not has_human_male:
+        return False, ""
     """V12.7-ALPHA: Cunnilingus → add faceless male + bald"""
     has_cunnilingus = "cunnilingus" in tags
     
@@ -809,6 +1094,9 @@ def tier_2d_cunnilingus_faceless_bald(tags: Set[str]) -> Tuple[bool, str]:
     return (True, f"cunnilingus: added {', '.join(added)}") if added else (False, "")
 # ==================== TIER 2E: PRINCESS CARRY - FAT MAN ====================
 def tier_2e_princess_carry_fat_man(tags: Set[str]) -> Tuple[bool, str]:
+    has_human_male = any(check_tag_exists(tags, t) for t in {"1boy", "2boys", "multiple boys"})
+    if not has_human_male:
+        return False, ""
     """V12.7-ALPHA: Princess carry/carrying → add fat man"""
     has_princess_carry = "princess carry" in tags
     has_carrying = "carrying" in tags
@@ -830,6 +1118,9 @@ def tier_2e_princess_carry_fat_man(tags: Set[str]) -> Tuple[bool, str]:
     return True, "princess_carry: added ((fat man))"
 
 def tier_2d1_cunnilingus_faceless_bald(tags: Set[str]) -> Tuple[bool, str]:
+    has_human_male = any(check_tag_exists(tags, t) for t in {"1boy", "2boys", "multiple boys"})
+    if not has_human_male:
+        return False, ""
     """V12.7-ALPHA: Cunnilingus → add faceless male + bald"""
     has_cunnilingus = "cunnilingus" in tags
     
@@ -852,6 +1143,9 @@ def tier_2d1_cunnilingus_faceless_bald(tags: Set[str]) -> Tuple[bool, str]:
     return (True, f"cunnilingus: added {', '.join(added)}") if added else (False, "")
 
 def tier_2e_hetero_irrumatio_contact_fat_man(tags: Set[str]) -> Tuple[bool, str]:
+    has_human_male = any(check_tag_exists(tags, t) for t in {"1boy", "2boys", "multiple boys"})
+    if not has_human_male:
+        return False, "" 
     if is_self_exposure(tags):
         return False, ""
     
@@ -868,6 +1162,9 @@ def tier_2e_hetero_irrumatio_contact_fat_man(tags: Set[str]) -> Tuple[bool, str]
     return False, ""
 
 def tier_2f_holding_leg_standing_sex_behind_faceless(tags: Set[str]) -> Tuple[bool, str]:
+    has_human_male = any(check_tag_exists(tags, t) for t in {"1boy", "2boys", "multiple boys"})
+    if not has_human_male:
+        return False, "" 
     if is_self_exposure(tags):
         return False, ""
     
@@ -903,6 +1200,9 @@ def tier_2f_holding_leg_standing_sex_behind_faceless(tags: Set[str]) -> Tuple[bo
     return False, ""
 
 def tier_2g_reverse_cowgirl_faceless_fat_man_bald(tags: Set[str]) -> Tuple[bool, str]:
+    has_human_male = any(check_tag_exists(tags, t) for t in {"1boy", "2boys", "multiple boys"})
+    if not has_human_male:
+        return False, "" 
     if is_self_exposure(tags):
         return False, ""
     
@@ -934,6 +1234,9 @@ def tier_2g_reverse_cowgirl_faceless_fat_man_bald(tags: Set[str]) -> Tuple[bool,
     return False, ""
 
 def tier_2h_spooning_faceless_fat_man_bald(tags: Set[str]) -> Tuple[bool, str]:
+    has_human_male = any(check_tag_exists(tags, t) for t in {"1boy", "2boys", "multiple boys"})
+    if not has_human_male:
+        return False, "" 
     if is_self_exposure(tags):
         return False, ""
     
@@ -960,7 +1263,9 @@ def tier_2h_spooning_faceless_fat_man_bald(tags: Set[str]) -> Tuple[bool, str]:
     return False, ""
 def tier_2h_v2_spooning_penetration_faceless(tags: Set[str]) -> Tuple[bool, str]:
     """V12.7-NEW: Spooning + penetration (without explicit 'from behind') → faceless trio"""
-    
+    has_human_male = any(check_tag_exists(tags, t) for t in {"1boy", "2boys", "multiple boys"})
+    if not has_human_male:
+        return False, "" 
     if is_self_exposure(tags):
         return False, ""
     
@@ -995,7 +1300,9 @@ def tier_2i_v2_standing_sex_faceless_add_fat_man(tags: Set[str]) -> Tuple[bool, 
     """V12.7-NEW: Nếu ĐÃ CÓ faceless+bald + standing sex → chỉ thêm fat man"""
     if is_self_exposure(tags):
         return False, ""
-    
+    has_human_male = any(check_tag_exists(tags, t) for t in {"1boy", "2boys", "multiple boys"})
+    if not has_human_male:
+        return False, "" 
     has_standing_sex = "standing sex" in tags
     has_sex_behind = has_any_tag(tags, {"sex from behind", "from behind"})
     
@@ -1013,6 +1320,9 @@ def tier_2i_v2_standing_sex_faceless_add_fat_man(tags: Set[str]) -> Tuple[bool, 
     return False, ""
 
 def tier_2i_standing_sex_behind_faceless_fat_man_bald(tags: Set[str]) -> Tuple[bool, str]:
+    has_human_male = any(check_tag_exists(tags, t) for t in {"1boy", "2boys", "multiple boys"})
+    if not has_human_male:
+        return False, "" 
     if is_self_exposure(tags):
         return False, ""
     
@@ -1039,6 +1349,9 @@ def tier_2i_standing_sex_behind_faceless_fat_man_bald(tags: Set[str]) -> Tuple[b
     return False, ""
 
 def tier_2_lying_faceless_contact_fat_man(tags: Set[str]) -> Tuple[bool, str]:
+    has_human_male = any(check_tag_exists(tags, t) for t in {"1boy", "2boys", "multiple boys"})
+    if not has_human_male:
+        return False, "" 
     if is_self_exposure(tags):
         return False, ""
     
@@ -1059,6 +1372,9 @@ def tier_2_lying_faceless_contact_fat_man(tags: Set[str]) -> Tuple[bool, str]:
     return False, ""
 
 def tier_3_sleep_faceless_penetration(tags: Set[str]) -> Tuple[bool, str]:
+    has_human_male = any(check_tag_exists(tags, t) for t in {"1boy", "2boys", "multiple boys"})
+    if not has_human_male:
+        return False, ""
     if is_self_exposure(tags):
         return False, ""
     
@@ -1086,6 +1402,9 @@ def tier_3_sleep_faceless_penetration(tags: Set[str]) -> Tuple[bool, str]:
     return False, ""
 
 def tier_4_missionary_fat_man(tags: Set[str]) -> Tuple[bool, str]:
+    has_human_male = any(check_tag_exists(tags, t) for t in {"1boy", "2boys", "multiple boys"})
+    if not has_human_male:
+        return False, ""
     # NEW V12.6: Bypass pov+solo block if has sex position
     if is_self_exposure(tags) and not has_explicit_sex_position(tags):
         return False, ""
@@ -1112,7 +1431,25 @@ def tier_6_doggystyle_prone(tags: Set[str]) -> Tuple[bool, str]:
         tags.add("on stomach")
         return True, "prone_bone: added on_stomach"
     return False, ""
-
+def tier_6_new_prone_bone_xray_cross_section(tags: Set[str]) -> Tuple[bool, str]:
+    """V12.7-NEW: Prone bone + sex from behind + lying + x-ray → add cross-section"""
+    
+    has_prone_bone = "prone bone" in tags
+    has_sex_behind = has_any_tag(tags, {"sex from behind", "from behind"})
+    has_lying = has_any_tag(tags, LYING_INDICATORS)
+    has_xray = "x-ray" in tags
+    
+    if not (has_prone_bone and has_sex_behind and has_lying and has_xray):
+        return False, ""
+    
+    if is_self_exposure(tags):
+        return False, ""
+    
+    if "cross-section" not in tags:
+        tags.add("cross-section")
+        return True, "prone_bone+sex_behind+lying+xray: added cross-section"
+    
+    return False, ""
 def tier_7_emotional_context(tags: Set[str]) -> Tuple[bool, str]:
     return False, ""
 
@@ -1207,7 +1544,9 @@ def tier_new_male_character_grouping(tags: Set[str]) -> Tuple[bool, str]:
     return False, ""
 def tier_2m_straddling_fat_man(tags: Set[str]) -> Tuple[bool, str]:
     """V12.7-NEW: Straddling (non-reverse) + penetration → fat man only"""
-    
+    has_human_male = any(check_tag_exists(tags, t) for t in {"1boy", "2boys", "multiple boys"})
+    if not has_human_male:
+        return False, "" 
     # Block self-exposure
     if is_self_exposure(tags):
         return False, ""
@@ -1281,45 +1620,50 @@ def tier_4_5_missionary_breast_sucking_cleanup(tags: Set[str]) -> Tuple[bool, st
     
     return True, "missionary_cleanup: removed breast_sucking"
 def tier_2n_breast_sucking_faceless_bald(tags: Set[str]) -> Tuple[bool, str]:
-    """V12.7-NEW: Breast sucking → faceless male + bald"""
-    
+    """V12.7-NEW: 1boy + 1girl + breast sucking (non-missionary) → faceless male + bald"""
+    has_human_male = any(check_tag_exists(tags, t) for t in {"1boy", "2boys", "multiple boys"})
+    if not has_human_male:
+        return False, ""
+
     has_breast_sucking = "breast sucking" in tags
-    
     if not has_breast_sucking:
-        return False, ""  # Nếu đã bị xóa ở TIER 4.5 → không chạy
-    
+        return False, ""  # Nếu đã bị xóa ở TIER 4.5 (missionary) → không chạy
+
     # Block self-exposure
     if is_self_exposure(tags):
         return False, ""
-    
-    # Require hetero context
-    has_boy = any(check_tag_exists(tags, boy_tag) for boy_tag in [
-        "1boy", "2boys", "multiple boys"
-    ])
-    has_1girl = check_tag_exists(tags, "1girl")
-    
+
+    # Require hetero context — 1boy + 1girl
+    # Dùng substring-split để detect 1girl ngay cả khi nằm trong grouped tag
+    # vd: "((1girl, restrained, bound wrists))" → normalize → split → "1girl"
+    has_boy = any(check_tag_exists(tags, t) for t in {"1boy", "2boys", "multiple boys"})
+    has_1girl = any(
+        "1girl" in [s.strip() for s in normalize_tag(t).split(",")]
+        for t in tags
+    )
+
     if not (has_boy and has_1girl):
         return False, ""
-    
+
     added = []
-    
-    # Add faceless male
+
     if not check_tag_exists(tags, "faceless male"):
         tags.add("((faceless male))")
         added.append("faceless_male")
-    
-    # Add bald
+
     if "bald" not in tags and "((bald))" not in tags:
         tags.add("((bald))")
         added.append("bald")
-    
+
     if added:
         return True, f"breast_sucking: added {', '.join(added)}"
-    
+
     return False, ""
 def tier_2p_imminent_fellatio_solo_faceless_trio(tags: Set[str]) -> Tuple[bool, str]:
     """V12.7-NEW: Imminent fellatio + solo focus → faceless + bald + fat man"""
-    
+    has_human_male = any(check_tag_exists(tags, t) for t in {"1boy", "2boys", "multiple boys"})
+    if not has_human_male:
+        return False, "" 
     # Check imminent fellatio
     has_imminent_fellatio = "imminent fellatio" in tags
     
@@ -1373,7 +1717,9 @@ def tier_2p_imminent_fellatio_solo_faceless_trio(tags: Set[str]) -> Tuple[bool, 
     return False, ""
 def tier_2q_fingering_faceless_contact_fat_man(tags: Set[str]) -> Tuple[bool, str]:
     """V12.7-NEW: Fingering + faceless + contact → fat man"""
-    
+    has_human_male = any(check_tag_exists(tags, t) for t in {"1boy", "2boys", "multiple boys"})
+    if not has_human_male:
+        return False, "" 
     has_fingering = "fingering" in tags
     has_faceless = check_tag_exists(tags, "faceless male")
     has_contact = has_any_tag(tags, CONTACT_ACTIONS)  # kiss, grabbing, etc
@@ -1400,7 +1746,9 @@ def tier_2q_fingering_faceless_contact_fat_man(tags: Set[str]) -> Tuple[bool, st
     return False, ""
 def tier_2r_lying_on_side_penetration_spooning_faceless(tags: Set[str]) -> Tuple[bool, str]:
     """V12.7-NEW: Lying + on side + penetration → auto-add spooning + faceless + bald"""
-    
+    has_human_male = any(check_tag_exists(tags, t) for t in {"1boy", "2boys", "multiple boys"})
+    if not has_human_male:
+        return False, "" 
     # Check lying + on side (spooning indicators)
     has_lying = has_any_tag(tags, LYING_INDICATORS)
     has_on_side = "on side" in tags
@@ -1453,7 +1801,9 @@ def tier_2r_lying_on_side_penetration_spooning_faceless(tags: Set[str]) -> Tuple
     return False, ""
 def tier_2s_aftermath_sitting_solo_fat_man(tags: Set[str]) -> Tuple[bool, str]:
     """V12.7-NEW: Aftermath + sitting + solo + 1boy + 1girl → fat man only"""
-    
+    has_human_male = any(check_tag_exists(tags, t) for t in {"1boy", "2boys", "multiple boys"})
+    if not has_human_male:
+        return False, "" 
     # ✅ BẮT BUỘC: Chỉ 1boy + 1girl (strict hetero)
     has_1boy = check_tag_exists(tags, "1boy")
     has_1girl = check_tag_exists(tags, "1girl")
@@ -1501,7 +1851,9 @@ def tier_2s_aftermath_sitting_solo_fat_man(tags: Set[str]) -> Tuple[bool, str]:
     return False, ""
 def tier_2o_doggystyle_sex_behind_faceless_bald(tags: Set[str]) -> Tuple[bool, str]:
     """V12.7-NEW: Doggystyle + sex from behind + penetration → faceless + bald"""
-    
+    has_human_male = any(check_tag_exists(tags, t) for t in {"1boy", "2boys", "multiple boys"})
+    if not has_human_male:
+        return False, ""
     # Block self-exposure
     if is_self_exposure(tags):
         return False, ""
@@ -1538,6 +1890,71 @@ def tier_2o_doggystyle_sex_behind_faceless_bald(tags: Set[str]) -> Tuple[bool, s
         return True, f"doggystyle_sex_behind: added {', '.join(added)}"
     
     return False, ""
+    """V12.7-NEW: missionary + lying + on back → remove hand on another's head, head grab"""
+    
+    has_missionary = "missionary" in tags
+    has_lying = "lying" in tags
+    has_on_back = "on back" in tags
+    
+    if not (has_missionary and has_lying and has_on_back):
+        return False, ""
+    
+    HEAD_GRAB_TAGS = {
+        "hand on another's head",
+        "head grab",
+        "((1boy, hand on another's head))"
+    }
+    
+    removed = []
+    for t in HEAD_GRAB_TAGS:
+        if t in tags:
+            tags.discard(t)
+            removed.append(t)
+    
+    if removed:
+        return True, f"missionary_lying: removed {', '.join(removed)}"
+    
+    return False, ""
+
+def tier_new_missionary_lying_remove_head_grabs(tags: Set[str]) -> Tuple[bool, str]:
+    """V12.7-NEW: missionary + lying + on back → remove hand on another's head, head grab + add spread legs"""
+    
+    has_missionary = "missionary" in tags
+    has_lying = "lying" in tags
+    has_on_back = "on back" in tags
+    
+    if not (has_missionary and has_lying and has_on_back):
+        return False, ""
+    
+    HEAD_GRAB_TAGS = {
+        "hand on another's head",
+        "head grab",
+        "((1boy, hand on another's head))"
+    }
+    
+    removed = []
+    added = []
+    
+    for t in HEAD_GRAB_TAGS:
+        if t in tags:
+            tags.discard(t)
+            removed.append(t)
+    
+    if "spread legs" not in tags:
+        tags.add("spread legs")
+        added.append("spread legs")
+    
+    actions = []
+    if removed:
+        actions.append(f"removed {', '.join(removed)}")
+    if added:
+        actions.append(f"added {', '.join(added)}")
+    
+    if actions:
+        return True, f"missionary_lying: {' | '.join(actions)}"
+    
+    return False, ""
+
 
 def process_tags(tags_set: Set[str]) -> Tuple[Set[str], List[str], bool]:
     tiers = [
@@ -1545,12 +1962,18 @@ def process_tags(tags_set: Set[str]) -> Tuple[Set[str], List[str], bool]:
             ("TIER 0", tier_0_arms_up),
             ("TIER NEW-TORN", tier_new_torn_clothes_consolidation),  # ← ADD HERE (sớm)
             ("TIER NEW-NIPPLES", tier_new_nipples_breasts_out),  # ← THÊM ĐÂY
-
+            ("TIER NEW-MISSIONARY-SPREAD-LEGS", tier_new_missionary_lying_spread_legs),  # ← THÊM ĐÂY
+            ("TIER NEW-DOGGYSTYLE-LOOKBACK-ARMS-UP", tier_new_doggystyle_lookback_arms_up),  # ← THÊM ĐÂY
             ("TIER 1", tier_1_faceless_wrapping),
             ("TIER 1.5", tier_1_5_clothed_female_nude_male),
             ("TIER 1.6", tier_1_6_pov_fingering_arms_behind_back),  # V12.7-ALPHA NEW
             ("TIER NEW-CLEANUP", tier_new_pov_solo_cleanup),
             ("TIER NEW-RESTRAINT", tier_new_restraint_grouping),
+            ("TIER NEW-RESTRAINED-LYING-POV-ARMS-UP", tier_new_restrained_lying_pov_arms_up),  # ← THÊM ĐÂY
+            ("TIER NEW-TRIO", tier_new_bound_arms_behind_back_grouping),
+            ("TIER NEW-MISSIONARY-LYING-REMOVE-HEAD-GRABS", tier_new_missionary_lying_remove_head_grabs),  # ← THÊM ĐÂY
+            ("TIER NEW-DOGGYSTYLE-BOUND-REMOVE-ARMS-BEHIND-BACK", tier_new_doggystyle_bound_remove_arms_behind_back),  # ← THÊM ĐÂY
+            
             ("TIER 2a", tier_2a_doggystyle_fat_man),
             ("TIER 2o", tier_2o_doggystyle_sex_behind_faceless_bald),
             ("TIER 2b", tier_2b_rape_fat_man),
@@ -1563,6 +1986,7 @@ def process_tags(tags_set: Set[str]) -> Tuple[Set[str], List[str], bool]:
             ("TIER 2d", tier_2d_cunnilingus_faceless_bald),          # V12.7 NEW ← ADD
             ("TIER 2L", tier_2l_kissing_faceless_bald),  # ← THÊM VÀO ĐÂY
             ("TIER 2j", tier_2j_standing_holding_leg_faceless_add_fat_man),  # ← MỚI (đơn giản)
+            ("TIER NEW-SEX-BEHIND-TOPDOWN-REMOVE-ANUS", tier_new_sex_behind_topdown_remove_anus),
             ("TIER NEW-CLEANUP", tier_new_pov_solo_cleanup),
             ("TIER NEW-SOLO-ASSIST", tier_new_solo_assisted_exposure_cleanup),  # ← ADD
             ("TIER 2e", tier_2e_hetero_irrumatio_contact_fat_man),
@@ -1580,8 +2004,10 @@ def process_tags(tags_set: Set[str]) -> Tuple[Set[str], List[str], bool]:
             ("TIER 3", tier_3_sleep_faceless_penetration),
             ("TIER 4", tier_4_missionary_fat_man),
             ("TIER 4.5", tier_4_5_missionary_breast_sucking_cleanup), # ← XÓA TRƯỚC
+            ("TIER 4.2", tier_new_missionary_restrained_arms_up_grouping),  # ← THÊM ĐÂY
             ("TIER 5", tier_5_bound_penetration),
             ("TIER 6", tier_6_doggystyle_prone),
+            ("TIER 6.5", tier_6_new_prone_bone_xray_cross_section),  # ← NEW
             ("TIER 7", tier_7_emotional_context),
             ("TIER 8", tier_8_multi_partner),
             ("TIER 2N", tier_2n_breast_sucking_faceless_bald),       # ← KIỂM TRA SAU (cuối pipeline)

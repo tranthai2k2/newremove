@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(powershell -Command \"Get-ChildItem ''E:\\\\webui_forge_cu121_torch231\\\\webui\\\\models\\\\Lora\\\\illust\\\\character'' | Where-Object { $_.Name -match ''RokuAka'' } | Select-Object Name\")",
+      "Bash(powershell -Command \"Get-ChildItem ''E:\\\\webui_forge_cu121_torch231\\\\webui\\\\models\\\\Lora'' -Recurse | Where-Object { $_.Name -match ''preview'' } | Select-Object -First 5 Name\")",
+      "Read(//d/datasetedior/**)",
+      "Bash(python -c \"import lora_browser\")",
+      "Bash(grep -oiE '[a-z _-]+pull[a-z _-]*' d:/no/wantremove/*.txt)",
+      "Bash(grep -oE '[^:]+$')",
+      "Bash(grep -oiE \"[a-z _-]+\\(pull|lift|aside\\)[a-z _-]*\" d:/no/wantremove/*.txt)",
+      "Bash(grep -vE '^$')"
+    ]
+  }
+}

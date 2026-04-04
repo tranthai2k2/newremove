@@ -209,6 +209,39 @@ EYE_TAGS = {
     'eyeshadow', 'mascara', 'eyeliner', 'makeup', 'cosmetics'
 }
 
+FACING_AWAY_TAGS = {
+    'facing away', 'facing_away', 'from behind', 'back turned', 'back view'
+}
+
+
+def load_tags_from_file(filepath: Path) -> Set[str]:
+    """Load comma-separated tags from a txt file, handle parenthetical aliases."""
+    tags = set()
+    if not filepath.exists():
+        return tags
+    with open(filepath, 'r', encoding='utf-8') as f:
+        content = f.read()
+    for raw in content.split(','):
+        raw = raw.strip()
+        if not raw:
+            continue
+        paren_match = re.match(r'^(.+?)\s*\((.+?)\)\s*$', raw)
+        if paren_match:
+            tags.add(paren_match.group(1).strip().lower())
+            tags.add(paren_match.group(2).strip().lower())
+        else:
+            tags.add(raw.lower())
+    return tags
+
+
+def build_facing_away_remove_tags(script_dir: Path) -> Set[str]:
+    """Load eyes + face + bangs tags to remove when facing away detected."""
+    head_dir = script_dir / "wantremove-head"
+    tags = set()
+    for fname in ("eyes.txt", "face.txt", "bangs.txt"):
+        tags |= load_tags_from_file(head_dir / fname)
+    return tags
+
 COVERED_EYES_TAGS = {
     'covered_eyes', 'blindfold', 'eyepatch', 'hair_over_eyes', 'eyes_visible_through_hair',
     'black_blindfold'
@@ -258,7 +291,10 @@ def process_character_txt(folder, user_prompt):
     lora_full_name = extract_lora_fullname(user_prompt)
     char_filename = f"{lora_full_name}-character.txt"
     char_file = output_folder / char_filename
-    
+
+    script_dir = Path(__file__).parent
+    facing_away_remove = build_facing_away_remove_tags(script_dir)
+
     try:
         with open(addfaceless_file, 'r', encoding='utf-8') as f:
             lines = [line.strip() for line in f if line.strip()]
@@ -273,6 +309,8 @@ def process_character_txt(folder, user_prompt):
                 'TIER 0': 0,
                 'TIER 1': 0
             }
+            facing_away_count = 0
+            mating_press_skip = 0
             stateless_tier_stats = {}
             
             # TIER 0: Track exposure state across lines
@@ -285,6 +323,15 @@ def process_character_txt(folder, user_prompt):
                 # Extract tags for analysis WITHOUT destroying structure
                 base_tags = extract_tags_for_analysis(base_line)
                 
+                # Skip: mating press + ass focus
+                if {'mating press', 'ass focus'} <= base_tags or \
+                   {'mating_press', 'ass_focus'} <= base_tags or \
+                   ({'mating press', 'ass_focus'} <= base_tags) or \
+                   ({'mating_press', 'ass focus'} <= base_tags):
+                    skipped += 1
+                    mating_press_skip += 1
+                    continue
+
                 # Clean prompt
                 clean_prompt = clean_prompt_tags(user_prompt, base_tags)
                 if clean_prompt is None:
@@ -345,6 +392,13 @@ def process_character_txt(folder, user_prompt):
                     if unique_new_tags:
                         final_line = f"{base_line}, {', '.join(unique_new_tags)}"
                 
+                # ===== FACING AWAY: loại tags mắt/face/bangs khỏi prompt =====
+                if base_tags & FACING_AWAY_TAGS:
+                    prompt_parts = [t.strip() for t in clean_prompt.split(',')]
+                    prompt_parts = [t for t in prompt_parts if t.lower() not in facing_away_remove]
+                    clean_prompt = ', '.join(prompt_parts)
+                    facing_away_count += 1
+
                 # Add user prompt
                 full_prompt = f"{final_line}, {clean_prompt}"
                 
@@ -356,6 +410,12 @@ def process_character_txt(folder, user_prompt):
             
             if black_blindfold_skip > 0:
                 msg += f"\n🔒 black_blindfold: {black_blindfold_skip} cases"
+
+            if mating_press_skip > 0:
+                msg += f"\n⛔ mating press+ass focus (skipped): {mating_press_skip} lines"
+
+            if facing_away_count > 0:
+                msg += f"\n👁️ facing away (removed eyes/face/bangs): {facing_away_count} lines"
             
             # Add stateful tier statistics
             if tier_stats_summary['TIER 0'] > 0:
