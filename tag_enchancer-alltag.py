@@ -4,20 +4,14 @@ from pathlib import Path
 
 def main():
     # Đường dẫn thư mục chính
-    root_path = r"D:\zhangyao\1-old\all-prompt\prompt moriaa"
+    root_path = r"F:\prompt\[PIXIV] Noi [810034] [AI Generated] [25]-1280x"
     
     # Kiểm tra đường dẫn tồn tại
     if not os.path.exists(root_path):
         print(f"❌ Không tìm thấy thư mục: {root_path}")
         return
     
-    # Tạo folder all_addfaceless.txt trong thư mục chính
-    output_folder = os.path.join(root_path, "[]-all_addfaceless.txt")
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
-        print(f"✅ Tạo folder: {output_folder}")
-    else:
-        print(f"ℹ️ Folder đã tồn tại: {output_folder}")
+    print(f"📁 Output trực tiếp vào root: {root_path}")
     
     # Duyệt qua tất cả các subfolder
     subfolders = [f for f in os.listdir(root_path) 
@@ -47,7 +41,7 @@ def main():
         # Nếu tìm thấy file, sao chép và đổi tên
         try:
             # Sao chép file với tên mới: {tên_folder}_addfaceless.txt
-            dest_file = os.path.join(output_folder, f"{subfolder}_addfaceless.txt")
+            dest_file = os.path.join(root_path, f"{subfolder}_addfaceless.txt")
             shutil.copy2(addfaceless_file, dest_file)
             print(f"✅ Sao chép: {subfolder}_addfaceless.txt")
             copied_count += 1
@@ -56,7 +50,7 @@ def main():
     
     print(f"\n{'='*60}")
     print(f"✨ Hoàn thành! Sao chép {copied_count} file")
-    print(f"📁 Tất cả file đã được lưu trong: all_addfaceless.txt")
+    print(f"📁 Tất cả file đã được lưu trực tiếp trong root")
     print(f"{'='*60}")
 
 if __name__ == "__main__":

@@ -5,7 +5,7 @@ try:
 except ImportError:
     pass  # Pillow 9.1+ has built-in AVIF support
 
-ROOT_FOLDER = r"F:\chưa làm\tanhatthuoctinh_Attribute Collection"
+ROOT_FOLDER = r"D:\zhangyao\pose-v-2\POSE-MORIAAA"
 root = Path(ROOT_FOLDER)
 
 print(f"Thư mục: {root}")

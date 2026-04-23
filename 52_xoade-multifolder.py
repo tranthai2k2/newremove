@@ -14,7 +14,7 @@ from datetime import datetime
 
 XOADE_PATH = Path(r"D:\no\52_xoade.py")
 
-PARENT_FOLDER = Path(r"D:\zhangyao\1-old\all-prompt\prompt moriaa")
+PARENT_FOLDER = Path(r"D:\zhangyao\pose-v-2\POSE-MORIAAA")
 
 # ================================================================
 

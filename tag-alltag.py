@@ -33,7 +33,7 @@ def collect_tags_from_cap1(cap1_folder: Path):
     return all_tags, found_files
 
 
-def process(cap1_folders: list, log_func):
+def process(cap1_folders: list, output_dir: Path, log_func):
     all_tags = set()
     total_files = []
 
@@ -52,9 +52,11 @@ def process(cap1_folders: list, log_func):
         log_func("\nKhông tìm thấy tag nào.\n")
         return None
 
-    parent_dir = Path(cap1_folders[0]).parent
-    output_dir = parent_dir / "_all_tags_combined"
-    output_dir.mkdir(exist_ok=True)
+    try:
+        output_dir.mkdir(parents=True, exist_ok=True)
+    except Exception as e:
+        log_func(f"\n[ERROR] Không tạo được output folder: {output_dir}\n{e}\n")
+        return None
     output_file = output_dir / "all_tag.txt"
 
     sorted_tags = sorted(all_tags)
@@ -74,6 +76,7 @@ class App(tk.Tk):
         self.title("All Tag Collector")
         self.resizable(True, True)
         self.folders = []
+        self.var_output = tk.StringVar()
         self._build_ui()
 
     def _build_ui(self):
@@ -105,6 +108,15 @@ class App(tk.Tk):
         tk.Button(btn_frame, text="▶  CHẠY", width=14, bg="#2d7d46", fg="white",
                   font=("", 10, "bold"), command=self.run).pack(side="right", padx=2)
 
+        # --- Output folder ---
+        out_frame = tk.Frame(self, padx=8, pady=0)
+        out_frame.pack(fill="x", pady=(0, 4))
+        tk.Label(out_frame, text="Folder output (chứa all_tag.txt):").pack(side="left")
+        tk.Entry(out_frame, textvariable=self.var_output).pack(
+            side="left", fill="x", expand=True, padx=(6, 4)
+        )
+        tk.Button(out_frame, text="Browse", width=10, command=self.pick_output).pack(side="left")
+
         # --- Log ---
         tk.Label(self, text="Log:", anchor="w", padx=8).pack(fill="x")
         self.log = scrolledtext.ScrolledText(self, height=12, state="disabled",
@@ -127,6 +139,11 @@ class App(tk.Tk):
         self.folders.clear()
         self.listbox.delete(0, tk.END)
 
+    def pick_output(self):
+        folder = filedialog.askdirectory(title="Chọn folder output")
+        if folder:
+            self.var_output.set(folder)
+
     def log_write(self, text):
         self.log.config(state="normal")
         self.log.insert(tk.END, text)
@@ -142,7 +159,15 @@ class App(tk.Tk):
         self.log.delete("1.0", tk.END)
         self.log.config(state="disabled")
 
-        result = process(self.folders, self.log_write)
+        output_text = self.var_output.get().strip()
+        if output_text:
+            output_dir = Path(output_text)
+        else:
+            output_dir = Path(self.folders[0]).parent / "_all_tags_combined"
+            self.var_output.set(str(output_dir))
+
+        self.log_write(f"[OUTPUT] {output_dir}\n")
+        result = process(self.folders, output_dir, self.log_write)
         if result:
             if messagebox.askyesno("Hoàn thành", f"Đã xong!\n\nMở thư mục output?"):
                 import subprocess

@@ -13,7 +13,7 @@ from datetime import datetime
 from pathlib import Path
 import argparse
 
-DEFAULT_FOLDER = Path(r"D:\zhangyao\1-old\test\Rurin - Archmage Restaurant")
+DEFAULT_FOLDER = Path(r"F:\prompt\test-prompt-moriaa\POSE-MORIAAA\suspended_congress_standing_sex_from_side_from_behind_from_below")
 
 # Parser arguments
 parser = argparse.ArgumentParser(description="Tag Enhancer")

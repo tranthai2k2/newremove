@@ -4,7 +4,6 @@
 Tag Enchancer AllTag - UI (multi root folder)
 """
 
-import os
 import shutil
 import threading
 from pathlib import Path
@@ -13,21 +12,31 @@ import tkinter as tk
 from tkinter import ttk, filedialog, scrolledtext
 
 
-OUTPUT_FOLDER_NAME = "[]-all_addfaceless.txt"
+def _unique_dest_path(dest_dir: Path, filename: str) -> Path:
+    """Tạo path đích không đè file đã có."""
+    dest = dest_dir / filename
+    if not dest.exists():
+        return dest
+
+    stem = dest.stem
+    suffix = dest.suffix
+    idx = 2
+    while True:
+        candidate = dest_dir / f"{stem}_{idx}{suffix}"
+        if not candidate.exists():
+            return candidate
+        idx += 1
 
 
-def process_root(root_path: Path, log_fn, stop_flag: threading.Event):
+def process_root(root_path: Path, output_dir: Path, log_fn, stop_flag: threading.Event):
     """Xử lý một root_path, trả về (copied, skipped, errors)."""
     if not root_path.exists():
         log_fn(f"❌ Không tồn tại: {root_path}\n", "err")
         return 0, 0, 1
 
-    output_folder = root_path / OUTPUT_FOLDER_NAME
-    output_folder.mkdir(exist_ok=True)
-    log_fn(f"📁 Output: {output_folder}\n", "info")
+    log_fn(f"📁 Output: {output_dir}\n", "info")
 
-    subfolders = sorted([f for f in root_path.iterdir() if f.is_dir()
-                         and f.name != OUTPUT_FOLDER_NAME])
+    subfolders = sorted([f for f in root_path.iterdir() if f.is_dir()])
 
     copied = skipped = errors = 0
 
@@ -44,9 +53,16 @@ def process_root(root_path: Path, log_fn, stop_flag: threading.Event):
             skipped += 1
             continue
         try:
-            dest = output_folder / f"{subfolder.name}_addfaceless.txt"
+            # Khi xuất chung nhiều root, thêm prefix root để tránh trùng tên.
+            is_shared_output = output_dir.resolve() != root_path.resolve()
+            if is_shared_output:
+                filename = f"{root_path.name}__{subfolder.name}_addfaceless.txt"
+            else:
+                filename = f"{subfolder.name}_addfaceless.txt"
+
+            dest = _unique_dest_path(output_dir, filename)
             shutil.copy2(addfaceless_file, dest)
-            log_fn(f"✅ {subfolder.name}_addfaceless.txt\n", "ok")
+            log_fn(f"✅ {dest.name}\n", "ok")
             copied += 1
         except Exception as e:
             log_fn(f"❌ Lỗi {subfolder.name}: {e}\n", "err")
@@ -64,6 +80,7 @@ class App(tk.Tk):
         self._roots: list[Path] = []
         self._running = False
         self._stop_flag = threading.Event()
+        self.var_output_folder = tk.StringVar()
         self._build_ui()
 
     # ── UI ──────────────────────────────────────────────────────────
@@ -96,6 +113,17 @@ class App(tk.Tk):
         btn_col.pack(side="left", fill="y", padx=(6, 0))
         ttk.Button(btn_col, text="Remove",    command=self._remove_sel, width=10).pack(pady=(0, 3))
         ttk.Button(btn_col, text="Clear all", command=self._clear_all,  width=10).pack()
+
+        # ── Output folder ──
+        frm2 = ttk.LabelFrame(self, text="Output folder (chung, tùy chọn)")
+        frm2.pack(fill="x", **pad)
+        out_inp = ttk.Frame(frm2)
+        out_inp.pack(fill="x", padx=6, pady=4)
+        ttk.Entry(out_inp, textvariable=self.var_output_folder).pack(
+            side="left", fill="x", expand=True, padx=(0, 4)
+        )
+        ttk.Button(out_inp, text="Browse", command=self._browse_output).pack(side="left", padx=(0, 4))
+        ttk.Button(out_inp, text="Use root", command=lambda: self.var_output_folder.set("")).pack(side="left")
 
         # ── Controls ──
         frm3 = ttk.Frame(self)
@@ -130,6 +158,11 @@ class App(tk.Tk):
         p = filedialog.askdirectory(title="Chọn root folder")
         if p:
             self._add_folder(Path(p))
+
+    def _browse_output(self):
+        p = filedialog.askdirectory(title="Chọn output folder")
+        if p:
+            self.var_output_folder.set(p)
 
     def _add_from_entry(self):
         txt = self.var_folder.get().strip()
@@ -179,15 +212,29 @@ class App(tk.Tk):
         if not self._roots:
             self._log("⚠️  Chưa thêm root folder nào.\n", "warn")
             return
+
+        output_txt = self.var_output_folder.get().strip()
+        if output_txt:
+            output_dir = Path(output_txt)
+        else:
+            output_dir = None
+
+        if output_dir is not None:
+            try:
+                output_dir.mkdir(parents=True, exist_ok=True)
+            except Exception as e:
+                self._log(f"❌ Không tạo được output folder: {output_dir}\n   {e}\n", "err")
+                return
+
         self._stop_flag.clear()
         self._set_running(True)
-        threading.Thread(target=self._run_all, daemon=True).start()
+        threading.Thread(target=self._run_all, args=(output_dir,), daemon=True).start()
 
     def _stop(self):
         self._stop_flag.set()
         self._log("\n⏹  Yêu cầu dừng...\n", "warn")
 
-    def _run_all(self):
+    def _run_all(self, output_dir: Path | None):
         roots = list(self._roots)
         total_roots = len(roots)
         self.progress["maximum"] = total_roots
@@ -198,13 +245,18 @@ class App(tk.Tk):
         self._log(f"\n{'='*56}\n", "head")
         self._log(f" START — {datetime.now():%Y-%m-%d %H:%M:%S}\n", "head")
         self._log(f" {total_roots} root folder(s)\n", "head")
+        if output_dir is None:
+            self._log(" Output mode: từng root (mặc định)\n", "head")
+        else:
+            self._log(f" Output chung: {output_dir}\n", "head")
         self._log(f"{'='*56}\n", "head")
 
         for idx, root in enumerate(roots, 1):
             if self._stop_flag.is_set():
                 break
             self._log(f"\n[{idx}/{total_roots}] {root}\n", "info")
-            copied, skipped, errors = process_root(root, self._log, self._stop_flag)
+            target_output = output_dir if output_dir is not None else root
+            copied, skipped, errors = process_root(root, target_output, self._log, self._stop_flag)
             total_copied  += copied
             total_skipped += skipped
             total_errors  += errors
